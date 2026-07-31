@@ -15,8 +15,8 @@ import {
 
 import { Grid } from "@mui/system";
 import { ApiGetCall, ApiGetCallWithPagination, ApiPostCall } from "../../api/ApiCall";
-import { CippOffCanvas } from "/src/components/CippComponents/CippOffCanvas";
-import { CippFormTenantSelector } from "/src/components/CippComponents/CippFormTenantSelector";
+import { CippOffCanvas } from "../CippComponents/CippOffCanvas";
+import { CippFormTenantSelector } from "../CippComponents/CippFormTenantSelector";
 import { Save, WarningOutlined } from "@mui/icons-material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CippFormComponent from "../CippComponents/CippFormComponent";
@@ -41,11 +41,24 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
 
   const formControl = useForm({
     mode: "onChange",
+    defaultValues: {
+      allowedTenants: [],
+      blockedTenants: [],
+      BlockedEndpoints: [],
+      IPRange: [],
+      Permissions: {},
+    },
   });
 
   const formState = useFormState({ control: formControl.control });
 
   const validateRoleName = (value) => {
+    const alphaNumRegex = /^[A-Za-z0-9]+$/;
+
+    if (!alphaNumRegex.test(value)) {
+      return "Role name must contain only letters and numbers, no spaces or special characters";
+    }
+
     if (
       customRoleList?.pages?.[0]?.some(
         (role) => role?.RowKey?.toLowerCase() === value?.toLowerCase()
@@ -62,6 +75,7 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
   const setDefaults = useWatch({ control: formControl.control, name: "Defaults" });
   const selectedPermissions = useWatch({ control: formControl.control, name: "Permissions" });
   const selectedEntraGroup = useWatch({ control: formControl.control, name: "EntraGroup" });
+  const ipRanges = useWatch({ control: formControl.control, name: "IPRange" });
 
   const {
     data: apiPermissions = [],
@@ -81,15 +95,37 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
     queryKey: "customRoleList",
   });
 
-  const { data: { pages = [] } = {}, isSuccess: tenantsSuccess } = ApiGetCallWithPagination({
+  const {
+    data: { pages = [] } = {},
+    isSuccess: tenantsSuccess,
+    isFetching: tenantsFetching,
+  } = ApiGetCallWithPagination({
     url: "/api/ListTenants?AllTenantSelector=true",
-    queryKey: "ListTenants-AllTenantSelector",
+    queryKey: "ListTenants-All",
   });
   const tenants = pages[0] || [];
 
   const matchPattern = (pattern, value) => {
     const regex = new RegExp(`^${pattern.replace("*", ".*")}$`);
     return regex.test(value);
+  };
+
+  const getFunctionDescriptionText = (description) => {
+    if (!description) return null;
+
+    if (Array.isArray(description)) {
+      return description?.[0]?.Text || description?.[0]?.text || null;
+    }
+
+    if (typeof description === "string") {
+      return description;
+    }
+
+    if (typeof description === "object") {
+      return description?.Text || description?.text || null;
+    }
+
+    return null;
   };
 
   const getBaseRolePermissions = (role) => {
@@ -163,7 +199,7 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
           });
         } else {
           // Handle tenant customer IDs (legacy format)
-          var tenantInfo = tenants.find((t) => t.customerId === item);
+          var tenantInfo = tenants.find((t) => t?.customerId === item);
           if (tenantInfo?.displayName) {
             var label = `${tenantInfo.displayName} (${tenantInfo.defaultDomainName})`;
             newAllowedTenants.push({
@@ -192,7 +228,7 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
           });
         } else {
           // Handle tenant customer IDs (legacy format)
-          var tenantInfo = tenants.find((t) => t.customerId === item);
+          var tenantInfo = tenants.find((t) => t?.customerId === item);
           if (tenantInfo?.displayName) {
             var label = `${tenantInfo.displayName} (${tenantInfo.defaultDomainName})`;
             newBlockedTenants.push({
@@ -234,6 +270,13 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
           value: endpoint,
         })) || [];
 
+      // Process IP ranges
+      const processedIPRanges =
+        currentPermissions?.IPRange?.map((ip) => ({
+          label: ip,
+          value: ip,
+        })) || [];
+
       formControl.reset({
         Permissions:
           basePermissions && Object.keys(basePermissions).length > 0
@@ -243,6 +286,7 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
         allowedTenants: newAllowedTenants,
         blockedTenants: newBlockedTenants,
         BlockedEndpoints: processedBlockedEndpoints,
+        IPRange: processedIPRanges,
         EntraGroup: currentPermissions?.EntraGroup,
       });
     }
@@ -334,6 +378,11 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
         return endpoint.value || endpoint;
       }) || [];
 
+    const processedIPRanges =
+      ipRanges?.map((ip) => {
+        return ip?.value || ip;
+      }) || [];
+
     updatePermissions.mutate({
       url: "/api/ExecCustomRole?Action=AddUpdate",
       data: {
@@ -343,6 +392,7 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
         AllowedTenants: processedAllowedTenants,
         BlockedTenants: processedBlockedTenants,
         BlockedEndpoints: processedBlockedEndpoints,
+        IPRange: processedIPRanges,
       },
     });
   };
@@ -409,7 +459,7 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
                 const apiFunction = apiPermissions[cat][obj][type][api];
                 items.push({
                   name: apiFunction.Name,
-                  description: apiFunction.Description?.[0]?.Text || null,
+                  description: getFunctionDescriptionText(apiFunction.Description),
                 });
               }
               return (
@@ -503,6 +553,7 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
                 dataKey: "Results",
                 labelField: "displayName",
                 valueField: "id",
+                showRefresh: true,
               }}
               formControl={formControl}
               fullWidth={true}
@@ -567,7 +618,9 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
                                     Object.keys(apiPermissions[cat][obj][type]).forEach(
                                       (apiKey) => {
                                         const apiFunction = apiPermissions[cat][obj][type][apiKey];
-                                        const descriptionText = apiFunction.Description?.[0]?.Text;
+                                        const descriptionText = getFunctionDescriptionText(
+                                          apiFunction.Description
+                                        );
                                         allEndpoints.push({
                                           label: descriptionText
                                             ? `${apiFunction.Name} - ${descriptionText}`
@@ -606,6 +659,26 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
               </Box>
             </>
           )}
+          <Box sx={{ mb: 3 }}>
+            <CippFormComponent
+              type="autoComplete"
+              name="IPRange"
+              label="Allowed IP Range (Single hosts or CIDR notation)"
+              formControl={formControl}
+              multiple={true}
+              freeSolo={true}
+              creatable={true}
+              options={[]}
+              placeholder="Type in the IP addresses and hit enter"
+              helperText={
+                selectedRole === "superadmin"
+                  ? "IP restrictions are disabled for superadmin role to prevent lockout issues"
+                  : "Leave empty to allow all IP addresses. Supports IPv4/IPv6 in CIDR notation (e.g., 192.168.1.0/24, 2001:db8::/32)"
+              }
+              fullWidth={true}
+              disabled={selectedRole === "superadmin"}
+            />
+          </Box>
           {apiPermissionFetching && (
             <>
               <Typography variant="h5">
@@ -815,6 +888,16 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
               </ul>
             </>
           )}
+          {ipRanges?.length > 0 && (
+            <>
+              <h5>Allowed IP Ranges</h5>
+              <ul>
+                {ipRanges.map((ip, idx) => (
+                  <li key={`ip-range-${idx}`}>{ip?.value || ip?.label || ip}</li>
+                ))}
+              </ul>
+            </>
+          )}
           {selectedPermissions && apiPermissionSuccess && (
             <>
               <h5>Selected Permissions</h5>
@@ -843,7 +926,13 @@ export const CippRoleAddEdit = ({ selectedRole }) => {
           className="me-2"
           type="submit"
           variant="contained"
-          disabled={updatePermissions.isPending || customRoleListFetching || !formState.isValid}
+          disabled={
+            updatePermissions.isPending ||
+            customRoleListFetching ||
+            apiPermissionFetching ||
+            tenantsFetching ||
+            !formState.isValid
+          }
           startIcon={
             <SvgIcon fontSize="small">
               <Save />

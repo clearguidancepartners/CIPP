@@ -22,9 +22,9 @@ import WarningIcon from "@mui/icons-material/Warning";
 import HelpIcon from "@mui/icons-material/Help";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { Controller, useForm } from "react-hook-form";
-import { ApiGetCall } from "/src/api/ApiCall";
-import CippButtonCard from "/src/components/CippCards/CippButtonCard";
-import { CippCodeBlock } from "/src/components/CippComponents/CippCodeBlock";
+import { ApiGetCall } from "../../api/ApiCall";
+import CippButtonCard from "./CippButtonCard";
+import { CippCodeBlock } from "../CippComponents/CippCodeBlock";
 import { CippOffCanvas } from "../CippComponents/CippOffCanvas";
 import { CippPropertyListCard } from "./CippPropertyListCard";
 import { getCippFormatting } from "../../utils/get-cipp-formatting";
@@ -470,6 +470,13 @@ export const CippDomainCards = ({ domain: propDomain = "", fullwidth = false }) 
     waiting: !!domain,
   });
 
+  const { data: autoDiscoverData, isFetching: autoDiscoverLoading } = ApiGetCall({
+    url: "/api/ListDomainHealth",
+    queryKey: `autodiscover-${domain}`,
+    data: { Domain: domain, Action: "ReadAutoDiscover" },
+    waiting: !!domain,
+  });
+
   const { data: httpsData, isFetching: httpsLoading } = ApiGetCall({
     url: "/api/ListDomainHealth",
     queryKey: `https-${domain}-${subdomains}`,
@@ -679,6 +686,26 @@ export const CippDomainCards = ({ domain: propDomain = "", fullwidth = false }) 
                       passes={mtastsData?.ValidationPasses}
                       warns={mtastsData?.ValidationWarns}
                       fails={mtastsData?.ValidationFails}
+                    />
+                  </div>
+                }
+              />
+            </Grid>
+            <Grid size={{ md: gridItemSize, xs: 12 }}>
+              <DomainResultCard
+                title="AutoDiscover"
+                data={autoDiscoverData}
+                isFetching={autoDiscoverLoading}
+                info={
+                  <div>
+                    <p>
+                      AutoDiscover ({autoDiscoverData?.RecordType || "None"}):
+                    </p>
+                    <CippCodeBlock code={autoDiscoverData?.Record || "No record found"} />
+                    <ResultList
+                      passes={autoDiscoverData?.ValidationPasses}
+                      warns={autoDiscoverData?.ValidationWarns}
+                      fails={autoDiscoverData?.ValidationFails}
                     />
                   </div>
                 }

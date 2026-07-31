@@ -1,51 +1,64 @@
-import { useState } from "react";
-import { usePathname } from "next/navigation";
-import PropTypes from "prop-types";
-import { Box, Divider, Drawer, Stack, Typography } from "@mui/material";
-import { Scrollbar } from "../components/scrollbar";
-import { SideNavItem } from "./side-nav-item";
-import { useSettings } from "../hooks/use-settings";
-import { ApiGetCall } from "../api/ApiCall.jsx";
+import { useState, useRef, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
+import PropTypes from 'prop-types'
+import { Box, Divider, Drawer, Stack } from '@mui/material'
+import { SideNavItem } from './side-nav-item'
+import { SideNavBookmarks } from './side-nav-bookmarks'
+import { ApiGetCall } from '../api/ApiCall.jsx'
+import { CippSponsor } from '../components/CippComponents/CippSponsor'
+import { useSettings } from '../hooks/use-settings'
 
-const SIDE_NAV_WIDTH = 270;
-const SIDE_NAV_COLLAPSED_WIDTH = 73; // icon size + padding + border right
-const TOP_NAV_HEIGHT = 64;
+const SIDE_NAV_WIDTH = 290
+const SIDE_NAV_COLLAPSED_WIDTH = 73 // icon size + padding + border right
+const TOP_NAV_HEIGHT = 64
+
+const isPathPrefix = (pathname, itemPath) => {
+  if (!pathname || !itemPath) return false
+  if (pathname === itemPath) return true
+  // Root "/" maps to /dashboardv2 under the hood
+  if (itemPath === '/') return pathname.startsWith('/dashboardv2')
+  return pathname.startsWith(itemPath + '/') || pathname.startsWith(itemPath + '?')
+}
 
 const markOpenItems = (items, pathname) => {
   return items.map((item) => {
-    const checkPath = !!(item.path && pathname);
-    const exactMatch = checkPath ? pathname === item.path : false;
-    const partialMatch = checkPath ? pathname.startsWith(item.path) : false;
+    const checkPath = !!(item.path && pathname)
+    const exactMatch = checkPath ? pathname === item.path : false
+    const partialMatch = checkPath ? isPathPrefix(pathname, item.path) : false
 
-    let openImmediately = exactMatch;
-    let newItems = item.items || [];
+    let openImmediately = exactMatch
+    let newItems = item.items || []
 
     if (newItems.length > 0) {
-      newItems = markOpenItems(newItems, pathname);
-      const childOpen = newItems.some((child) => child.openImmediately);
-      openImmediately = openImmediately || childOpen || exactMatch; // Ensure parent opens if child is open
+      newItems = markOpenItems(newItems, pathname)
+      const childOpen = newItems.some((child) => child.openImmediately)
+      openImmediately = openImmediately || childOpen || exactMatch // Ensure parent opens if child is open
     } else {
-      openImmediately = openImmediately || partialMatch; // Leaf items open on partial match
+      openImmediately = openImmediately || partialMatch // Leaf items open on partial match
     }
 
     return {
       ...item,
       items: newItems,
       openImmediately,
-    };
-  });
-};
+    }
+  })
+}
 
-const renderItems = ({ collapse = false, depth = 0, items, pathname }) =>
-  items.reduce((acc, item) => reduceChildRoutes({ acc, collapse, depth, item, pathname }), []);
+const renderItems = ({ collapse = false, depth = 0, items, pathname, category = '' }) =>
+  items.reduce(
+    (acc, item) => reduceChildRoutes({ acc, collapse, depth, item, pathname, category }),
+    []
+  )
 
-const reduceChildRoutes = ({ acc, collapse, depth, item, pathname }) => {
-  const checkPath = !!(item.path && pathname);
-  const exactMatch = checkPath && pathname === item.path;
-  const partialMatch = checkPath && pathname.startsWith(item.path);
+const reduceChildRoutes = ({ acc, collapse, depth, item, pathname, category }) => {
+  const checkPath = !!(item.path && pathname)
+  const exactMatch = checkPath && pathname === item.path
+  const partialMatch = checkPath ? isPathPrefix(pathname, item.path) : false
 
-  const hasChildren = item.items && item.items.length > 0;
-  const isActive = exactMatch || (partialMatch && !hasChildren);
+  const hasChildren = item.items && item.items.length > 0
+  const isActive = exactMatch || (partialMatch && !hasChildren)
+  const currentCategory = depth === 0 && item.type === 'header' ? item.title : category
 
   if (hasChildren) {
     acc.push(
@@ -58,14 +71,16 @@ const reduceChildRoutes = ({ acc, collapse, depth, item, pathname }) => {
         key={item.title}
         openImmediately={item.openImmediately}
         path={item.path}
+        scope={item.scope}
         title={item.title}
         type={item.type}
+        category={currentCategory}
       >
         <Stack
           component="ul"
           spacing={0.5}
           sx={{
-            listStyle: "none",
+            listStyle: 'none',
             m: 0,
             p: 0,
           }}
@@ -75,10 +90,11 @@ const reduceChildRoutes = ({ acc, collapse, depth, item, pathname }) => {
             depth: depth + 1,
             items: item.items,
             pathname,
+            category: currentCategory,
           })}
         </Stack>
       </SideNavItem>
-    );
+    )
   } else {
     acc.push(
       <SideNavItem
@@ -89,176 +105,168 @@ const reduceChildRoutes = ({ acc, collapse, depth, item, pathname }) => {
         icon={item.icon}
         key={item.title}
         path={item.path}
+        scope={item.scope}
         title={item.title}
+        category={currentCategory}
       />
-    );
+    )
   }
 
-  return acc;
-};
+  return acc
+}
 
 export const SideNav = (props) => {
-  const { items, onPin, pinned = false } = props;
-  const pathname = usePathname();
-  const [hovered, setHovered] = useState(false);
-  const collapse = !(pinned || hovered);
-  const { data: profile } = ApiGetCall({ url: "/api/me", queryKey: "authmecipp" });
+  const { items, onPin, pinned = false } = props
+  const pathname = usePathname()
+  const [hovered, setHovered] = useState(false)
+  const collapse = !(pinned || hovered)
+  const { data: profile } = ApiGetCall({ url: '/api/me', queryKey: 'authmecipp' })
+  const settings = useSettings()
+  const showSidebarBookmarks = settings.bookmarkSidebar !== false
+  const paperRef = useRef(null)
 
-  // Preprocess items to mark which should be open
-  const processedItems = markOpenItems(items, pathname);
-  //select a random sponsor image based on priority, priority 1 should be higher than priority 2 or higher
-  const currentSettings = useSettings();
-  const theme = currentSettings?.currentTheme?.value;
-  const sponsorimages = [
-    {
-      link: "https://rewst.io",
-      imagesrc: theme === "light" ? "/sponsors/rewst.png" : "/sponsors/rewst_dark.png",
-      priority: 1,
-    },
-    {
-      link: "https://www.domotz.com/cipp-community-free-domotz-beta.php?utm_source=Community_CIPP&utm_medium=Community_CIPP&utm_campaign=Community_CIPP",
-      imagesrc: theme === "light" ? "/sponsors/domotz-light.png" : "/sponsors/domotz-dark.png",
-      priority: 1,
-    },
-    {
-      link: "https://ninjaone.com",
-      imagesrc: theme === "light" ? "/sponsors/ninjaone.png" : "/sponsors/ninjaone_white.png",
-      priority: 1,
-    },
-    {
-      link: "https://augmentt.com",
-      imagesrc: theme === "light" ? "/sponsors/augmentt-light.png" : "/sponsors/augmentt-dark.png",
-      priority: 1,
-    },
-    {
-      link: "https://huntress.com",
-      imagesrc: "/sponsors/huntress_teal.png",
-      priority: 1,
-    },
-    {
-      link: "https://rightofboom.com/rob-2026-overview/rob-2026-registration/?utm_source=CIPP&utm_medium=referral&utm_campaign=CIPPM365&utm_content=cta_button",
-      imagesrc: theme === "light" ? "/sponsors/RoB-light.png" : "/sponsors/RoB.png",
-      priority: 1,
-    },
-  ];
+  // Intercept wheel events on the side nav to fully isolate scroll.
+  // preventDefault stops wheel events from reaching the main content,
+  // and manual scrollTop has no momentum so it stops instantly when the cursor leaves.
+  // Uses RAF-based easing to smooth out discrete mouse wheel jumps.
+  useEffect(() => {
+    const el = paperRef.current
+    if (!el) return
 
-  const randomSponsorImage = () => {
-    let totalPriority = 0;
-    for (let i = 0; i < sponsorimages.length; i++) {
-      totalPriority += sponsorimages[i].priority;
+    let targetScrollTop = el.scrollTop
+    let animating = false
+    let lastWrite = null
+
+    const animate = () => {
+      if (!animating) {
+        return
+      }
+      const diff = targetScrollTop - el.scrollTop
+
+      // browsers can round to device pixels
+      if (Math.abs(diff) < 1) {
+        animating = false
+        return
+      }
+      const before = el.scrollTop
+      lastWrite = before + diff * 0.25
+      el.scrollTop = lastWrite
+      if (el.scrollTop === before) {
+        // write clamped or rounded to a no-op, stop instead of spinning the raf loop
+        targetScrollTop = before
+        animating = false
+        return
+      }
+      requestAnimationFrame(animate)
     }
-    let random = Math.floor(Math.random() * totalPriority);
-    let runningTotal = 0;
-    for (let i = 0; i < sponsorimages.length; i++) {
-      runningTotal += sponsorimages[i].priority;
-      if (random < runningTotal) {
-        return sponsorimages[i];
+
+    const handleWheel = (e) => {
+      e.preventDefault()
+      const maxScroll = el.scrollHeight - el.clientHeight
+      targetScrollTop = Math.max(0, Math.min(maxScroll, targetScrollTop + e.deltaY))
+      if (!animating) {
+        animating = true
+        requestAnimationFrame(animate)
       }
     }
-  };
 
-  const randomimg = randomSponsorImage();
+    // scrollbar drags, keyboard and touch move scrollTop outside the wheel path,
+    // resync the target so the easing loop doesn't fight them for the thumb.
+    // mid-animation, events matching our own write are the loop's echo, skip those
+    const handleScroll = () => {
+      if (animating && lastWrite !== null && Math.abs(el.scrollTop - lastWrite) < 1) {
+        return
+      }
+      targetScrollTop = el.scrollTop
+      animating = false
+    }
+
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      // queued animate() exits on guard, stopping RAF chain
+      animating = false
+      el.removeEventListener('wheel', handleWheel)
+      el.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
+
+  // Preprocess items to mark which should be open
+  const processedItems = markOpenItems(items, pathname)
   return (
     <>
       {profile?.clientPrincipal && profile?.clientPrincipal?.userRoles?.length > 2 && (
         <Drawer
           open
           variant="permanent"
+          data-tutorial="side-nav"
           PaperProps={{
-            onMouseEnter: () => {
-              setHovered(true);
-            },
-            onMouseLeave: () => {
-              setHovered(false);
-            },
+            ref: paperRef,
+            onMouseEnter: () => setHovered(true),
+            onMouseLeave: () => setHovered(false),
             sx: {
-              backgroundColor: "background.default",
+              backgroundColor: 'background.default',
               height: `calc(100% - ${TOP_NAV_HEIGHT}px)`,
-              overflowX: "hidden",
+              overflowX: 'hidden',
+              overflowY: 'auto',
+              scrollbarGutter: 'stable',
               top: TOP_NAV_HEIGHT,
-              transition: "width 250ms ease-in-out",
+              transition: 'width 250ms ease-in-out',
               width: collapse ? SIDE_NAV_COLLAPSED_WIDTH : SIDE_NAV_WIDTH,
               zIndex: (theme) => theme.zIndex.appBar - 100,
             },
           }}
         >
-          <Scrollbar
+          <Box
+            component="nav"
             sx={{
-              height: "100%",
-              overflowX: "hidden",
-              "& .simplebar-content": {
-                height: "100%",
-              },
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+              p: 2,
             }}
           >
             <Box
-              component="nav"
+              component="ul"
               sx={{
-                display: "flex",
-                flexDirection: "column",
-                height: "100%",
-                p: 2,
+                flexGrow: 1,
+                listStyle: 'none',
+                m: 0,
+                p: 0,
               }}
             >
-              <Box
-                component="ul"
-                sx={{
-                  flexGrow: 1,
-                  listStyle: "none",
-                  m: 0,
-                  p: 0,
-                }}
-              >
-                {renderItems({
-                  collapse,
-                  depth: 0,
-                  items: processedItems,
-                  pathname,
-                })}
-              </Box>{" "}
-              {/* Add this closing tag */}
-              {profile?.clientPrincipal && (
+              {/* Bookmarks section above Dashboard */}
+              {showSidebarBookmarks && (
                 <>
-                  <Divider />
-                  <Typography
-                    color="text.secondary"
-                    variant="caption"
-                    sx={{ lineHeight: 4, textAlign: "center" }}
-                  >
-                    This application is sponsored by
-                  </Typography>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      height: "55px", // Fixed height for the container
-                    }}
-                  >
-                    <img
-                      src={randomimg.imagesrc}
-                      alt="sponsor"
-                      style={{
-                        cursor: "pointer",
-                        maxHeight: "50px", // Limit the height of the image
-                        width: "auto",
-                        maxWidth: "100px", // Maintain aspect ratio with max width
-                      }}
-                      onClick={() => window.open(randomimg.link)}
-                    />
-                  </Box>
+                  <SideNavBookmarks collapse={collapse} />
+                  <Divider sx={{ my: 1 }} />
                 </>
               )}
-            </Box>{" "}
-            {/* Closing tag for the parent Box */}
-          </Scrollbar>
+              {/* Render all menu items */}
+              {renderItems({
+                collapse,
+                depth: 0,
+                items: processedItems,
+                pathname,
+              })}
+            </Box>{' '}
+            {/* Add this closing tag */}
+            {profile?.clientPrincipal && (
+              <Box
+                sx={{ position: 'sticky', bottom: 0, backgroundColor: 'background.default', pt: 1 }}
+              >
+                <CippSponsor />
+              </Box>
+            )}
+          </Box>{' '}
+          {/* Closing tag for the parent Box */}
         </Drawer>
       )}
     </>
-  );
-};
+  )
+}
 
 SideNav.propTypes = {
   onPin: PropTypes.func,
   pinned: PropTypes.bool,
-};
+}

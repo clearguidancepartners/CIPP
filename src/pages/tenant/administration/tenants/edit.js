@@ -1,18 +1,18 @@
-import { Layout as DashboardLayout } from "/src/layouts/index.js";
+import { Layout as DashboardLayout } from "../../../../layouts/index.js";
 import { useForm } from "react-hook-form";
 import { ApiGetCall } from "../../../../api/ApiCall";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import CippFormComponent from "/src/components/CippComponents/CippFormComponent";
+import CippFormComponent from "../../../../components/CippComponents/CippFormComponent";
 import { Stack, Box, Tab, Tabs, Typography, Button } from "@mui/material";
 import { Grid } from "@mui/system";
-import { CippCardTabPanel } from "/src/components/CippComponents/CippCardTabPanel";
-import CippFormSection from "/src/components/CippFormPages/CippFormSection";
+import { CippCardTabPanel } from "../../../../components/CippComponents/CippCardTabPanel";
+import CippFormSection from "../../../../components/CippFormPages/CippFormSection";
 import CippPageCard from "../../../../components/CippCards/CippPageCard";
-import { CippPropertyListCard } from "/src/components/CippCards/CippPropertyListCard";
+import { CippPropertyListCard } from "../../../../components/CippCards/CippPropertyListCard";
 import { getCippFormatting } from "../../../../utils/get-cipp-formatting";
-import CippCustomVariables from "/src/components/CippComponents/CippCustomVariables";
-import { CippOffboardingDefaultSettings } from "/src/components/CippComponents/CippOffboardingDefaultSettings";
+import CippCustomVariables from "../../../../components/CippComponents/CippCustomVariables";
+import { CippOffboardingDefaultSettings } from "../../../../components/CippComponents/CippOffboardingDefaultSettings";
 
 function tabProps(index) {
   return {
@@ -69,16 +69,23 @@ const Page = () => {
         RemoveMFADevices: false,
         RemoveTeamsPhoneDID: false,
         ClearImmutableId: false,
+        DisableOneDriveSharing: false,
+        removeCalendarPermissions: false,
+        postExecution: {
+          psa: false,
+          email: false,
+          webhook: false,
+        },
       };
-      
+
       let offboardingDefaults = {};
-      
+
       if (tenantOffboardingDefaults) {
         try {
           const parsed = JSON.parse(tenantOffboardingDefaults);
           // Merge defaults with parsed values to ensure all fields are defined
-          offboardingDefaults = { 
-            offboardingDefaults: { ...defaultOffboardingValues, ...parsed } 
+          offboardingDefaults = {
+            offboardingDefaults: { ...defaultOffboardingValues, ...parsed }
           };
         } catch {
           offboardingDefaults = { offboardingDefaults: defaultOffboardingValues };
@@ -86,7 +93,7 @@ const Page = () => {
       } else {
         offboardingDefaults = { offboardingDefaults: defaultOffboardingValues };
       }
-      
+
       offboardingFormControl.reset(offboardingDefaults);
     }
   }, [tenantDetails.isSuccess, tenantDetails.data, id]);
@@ -113,8 +120,15 @@ const Page = () => {
       RemoveMFADevices: false,
       RemoveTeamsPhoneDID: false,
       ClearImmutableId: false,
+      DisableOneDriveSharing: false,
+      removeCalendarPermissions: false,
+      postExecution: {
+        psa: false,
+        email: false,
+        webhook: false,
+      },
     };
-    
+
     offboardingFormControl.reset({ offboardingDefaults: defaultOffboardingValues });
   };
 
@@ -222,7 +236,7 @@ const Page = () => {
                 <Typography variant="body2" color="text.secondary">
                   Configure default offboarding settings specifically for this tenant. These settings will override user defaults when offboarding users in this tenant.
                 </Typography>
-                
+
                 <CippFormSection
                   relatedQueryKeys={[`TenantProperties_${id}`]}
                   formControl={offboardingFormControl}
@@ -237,14 +251,14 @@ const Page = () => {
                   }}
                   hideTitle={true}
                 >
-                  <CippOffboardingDefaultSettings 
+                  <CippOffboardingDefaultSettings
                     formControl={offboardingFormControl}
                     title="Tenant Offboarding Defaults"
                   />
-                  
+
                   <Box sx={{ mt: 2 }}>
-                    <Button 
-                      variant="outlined" 
+                    <Button
+                      variant="outlined"
                       onClick={handleResetOffboardingDefaults}
                       sx={{ mr: 2 }}
                     >

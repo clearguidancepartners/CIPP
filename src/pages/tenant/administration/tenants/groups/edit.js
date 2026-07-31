@@ -1,11 +1,11 @@
-import { Layout as DashboardLayout } from "/src/layouts/index.js";
+import { Layout as DashboardLayout } from "../../../../../layouts/index.js";
 import { useForm } from "react-hook-form";
-import { ApiGetCall } from "/src/api/ApiCall";
+import { ApiGetCall } from "../../../../../api/ApiCall";
 import { useEffect } from "react";
 import { useRouter } from "next/router";
 import { Box } from "@mui/material";
-import CippFormPage from "/src/components/CippFormPages/CippFormPage";
-import CippAddEditTenantGroups from "/src/components/CippComponents/CippAddEditTenantGroups";
+import CippFormPage from "../../../../../components/CippFormPages/CippFormPage";
+import CippAddEditTenantGroups from "../../../../../components/CippComponents/CippAddEditTenantGroups";
 
 const Page = () => {
   const router = useRouter();
@@ -44,7 +44,23 @@ const Page = () => {
           formattedDynamicRules = rules.map((rule) => {
             // Handle value - it's always an array of objects from the backend
             let valueForForm;
-            if (Array.isArray(rule.value)) {
+
+            // Special handling for custom variables (nested structure with variableName and value)
+            if (
+              rule.property === "customVariable" &&
+              typeof rule.value === "object" &&
+              rule.value?.variableName
+            ) {
+              valueForForm = {
+                variableName: rule.value.variableName,
+                value: rule.value.value,
+              };
+            } else if (rule.property === "gdapRelationshipAge") {
+              // Number input bound to value.value - no label/option wrapping
+              valueForForm = {
+                value: rule.value?.value ?? rule.value,
+              };
+            } else if (Array.isArray(rule.value)) {
               // If it's an array of objects, extract all values
               valueForForm = rule.value.map((item) => ({
                 label: item.label || item.value || item,
@@ -77,6 +93,12 @@ const Page = () => {
                     ? "Available Service Plan"
                     : rule.property === "delegatedAccessStatus"
                     ? "Delegated Access Status"
+                    : rule.property === "tenantGroupMember"
+                    ? "Member of Tenant Group"
+                    : rule.property === "customVariable"
+                    ? "Custom Variable"
+                    : rule.property === "gdapRelationshipAge"
+                    ? "GDAP Relationship Age (days)"
                     : rule.property,
                 value: rule.property,
                 type:
@@ -86,6 +108,12 @@ const Page = () => {
                     ? "servicePlan"
                     : rule.property === "delegatedAccessStatus"
                     ? "delegatedAccess"
+                    : rule.property === "tenantGroupMember"
+                    ? "tenantGroup"
+                    : rule.property === "customVariable"
+                    ? "customVariable"
+                    : rule.property === "gdapRelationshipAge"
+                    ? "gdapAge"
                     : "unknown",
               },
               operator: {
@@ -98,6 +126,18 @@ const Page = () => {
                     ? "In"
                     : rule.operator === "notIn"
                     ? "Not In"
+                    : rule.operator === "like"
+                    ? "Contains"
+                    : rule.operator === "notlike"
+                    ? "Does Not Contain"
+                    : rule.operator === "gt"
+                    ? "Greater Than"
+                    : rule.operator === "ge"
+                    ? "Greater Than or Equal"
+                    : rule.operator === "lt"
+                    ? "Less Than"
+                    : rule.operator === "le"
+                    ? "Less Than or Equal"
                     : rule.operator,
                 value: rule.operator,
               },
@@ -116,6 +156,7 @@ const Page = () => {
         groupDescription: groupData?.Description ?? "",
         groupType: isDynamic ? "dynamic" : "static",
         ruleLogic: groupData?.RuleLogic || "and",
+        excludePartnerTenant: groupData?.ExcludePartnerTenant ?? false,
         members: !isDynamic
           ? groupData?.Members?.map((member) => ({
               label: member.displayName,
@@ -125,7 +166,7 @@ const Page = () => {
         dynamicRules: formattedDynamicRules,
       });
     }
-  }, [groupDetails.isSuccess, groupDetails.data]);
+  }, [groupDetails.isSuccess, groupDetails.data, id]);
 
   const customDataFormatter = (values) => {
     const formattedData = {
@@ -148,11 +189,11 @@ const Page = () => {
 
   return (
     <CippFormPage
-      title={
-        groupDetails.isSuccess
-          ? `Tenant Group - ${groupDetails?.data?.Results?.[0]?.Name}`
-          : "Loading..."
-      }
+      title={`Tenant Group${
+        groupDetails.isSuccess && groupDetails?.data?.Results?.[0]?.Name
+          ? ` - ${groupDetails.data.Results[0].Name}`
+          : ""
+      }`}
       backButtonTitle="Tenant Groups"
       formControl={formControl}
       postUrl="/api/ExecTenantGroup"
@@ -163,7 +204,7 @@ const Page = () => {
       <Box sx={{ width: "100%" }}>
         <CippAddEditTenantGroups
           formControl={formControl}
-          title="Edit Tenant Group"
+          title="Tenant Group"
           backButtonTitle="Tenant Groups"
           hideSubmitButton={true}
         />

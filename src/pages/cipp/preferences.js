@@ -1,14 +1,14 @@
 import Head from "next/head";
-import { Box, Container, Stack } from "@mui/material";
+import { Alert, Box, Container, Stack } from "@mui/material";
 import { Grid } from "@mui/system";
-import { Layout as DashboardLayout } from "/src/layouts/index.js";
+import { Layout as DashboardLayout } from "../../layouts/index.js";
 import { CippPropertyListCard } from "../../components/CippCards/CippPropertyListCard";
 import CippFormComponent from "../../components/CippComponents/CippFormComponent";
 import { useForm, useWatch } from "react-hook-form";
 import { useSettings } from "../../hooks/use-settings";
 import countryList from "../../data/countryList.json";
 import { CippSettingsSideBar } from "../../components/CippComponents/CippSettingsSideBar";
-import CippDevOptions from "/src/components/CippComponents/CippDevOptions";
+import CippDevOptions from "../../components/CippComponents/CippDevOptions";
 import { CippOffboardingDefaultSettings } from "../../components/CippComponents/CippOffboardingDefaultSettings";
 import { ApiGetCall } from "../../api/ApiCall";
 import { getCippFormatting } from "../../utils/get-cipp-formatting";
@@ -36,6 +36,12 @@ const Page = () => {
   const auth = ApiGetCall({
     url: "/api/me",
     queryKey: "authmecipp",
+  });
+
+  // Test suites for the default Home page suite selector (shared cache with the dashboard)
+  const reportsApi = ApiGetCall({
+    url: "/api/ListTestReports",
+    queryKey: "ListTestReports",
   });
 
   const cleanedSettings = { ...settings };
@@ -183,47 +189,47 @@ const Page = () => {
   const portalLinksConfig = [
     {
       name: "portalLinks.M365_Portal",
-      label: "M365 Portal",
+      label: "M365",
     },
     {
       name: "portalLinks.Exchange_Portal",
-      label: "Exchange Portal",
+      label: "Exchange",
     },
     {
       name: "portalLinks.Entra_Portal",
-      label: "Entra Portal",
+      label: "Entra",
     },
     {
       name: "portalLinks.Teams_Portal",
-      label: "Teams Portal",
+      label: "Teams",
     },
     {
       name: "portalLinks.Azure_Portal",
-      label: "Azure Portal",
+      label: "Azure",
     },
     {
       name: "portalLinks.Intune_Portal",
-      label: "Intune Portal",
+      label: "Intune",
     },
     {
       name: "portalLinks.SharePoint_Admin",
-      label: "SharePoint Admin",
+      label: "SharePoint",
     },
     {
       name: "portalLinks.Security_Portal",
-      label: "Security Portal",
+      label: "Security",
     },
     {
       name: "portalLinks.Compliance_Portal",
-      label: "Compliance Portal",
+      label: "Purview",
     },
     {
       name: "portalLinks.Power_Platform_Portal",
-      label: "Power Platform Portal",
+      label: "Power Platform",
     },
     {
       name: "portalLinks.Power_BI_Portal",
-      label: "Power BI Portal",
+      label: "Power BI",
     },
   ];
 
@@ -254,7 +260,7 @@ const Page = () => {
                       title="General Settings"
                       propertyItems={[
                         {
-                          label: "Default usage location for users",
+                          label: "Default usage location for users *",
                           value: (
                             <CippFormComponent
                               type="autoComplete"
@@ -271,7 +277,7 @@ const Page = () => {
                           ),
                         },
                         {
-                          label: "Default Page Size",
+                          label: "Default Page Size *",
                           value: (
                             <CippFormComponent
                               type="autoComplete"
@@ -284,6 +290,23 @@ const Page = () => {
                               validators={{
                                 required: { value: true, message: "This field is required" },
                               }}
+                            />
+                          ),
+                        },
+                        {
+                          label: "Default test suite on the Home page",
+                          value: (
+                            <CippFormComponent
+                              type="autoComplete"
+                              creatable={false}
+                              name="defaultTestSuite"
+                              formControl={formcontrol}
+                              multiple={false}
+                              options={(reportsApi.data || []).map((report) => ({
+                                value: report.id,
+                                label: report.name,
+                              }))}
+                              isFetching={reportsApi.isFetching}
                             />
                           ),
                         },
@@ -311,7 +334,62 @@ const Page = () => {
                         },
                       ]}
                     />
-                    <CippOffboardingDefaultSettings formControl={formcontrol} />
+                    <CippPropertyListCard
+                      layout="two"
+                      showDivider={false}
+                      title="Navigation Settings"
+                      propertyItems={[
+                        {
+                          label: "Show Sidebar Bookmarks",
+                          value: (
+                            <CippFormComponent
+                              type="switch"
+                              name="bookmarkSidebar"
+                              formControl={formcontrol}
+                            />
+                          ),
+                        },
+                        {
+                          label: "Show Popover Bookmarks",
+                          value: (
+                            <CippFormComponent
+                              type="switch"
+                              name="bookmarkPopover"
+                              formControl={formcontrol}
+                            />
+                          ),
+                        },
+                        {
+                          label: "Bookmark Reorder Mode",
+                          value: (
+                            <CippFormComponent
+                              type="radio"
+                              name="bookmarkReorderMode"
+                              formControl={formcontrol}
+                              row={true}
+                              options={[
+                                { value: "arrows", label: "Arrow Buttons" },
+                                { value: "drag", label: "Drag and Drop" },
+                              ]}
+                            />
+                          ),
+                        },
+                        {
+                          label: "Compact Navigation",
+                          value: (
+                            <CippFormComponent
+                              type="switch"
+                              name="compactNav"
+                              formControl={formcontrol}
+                            />
+                          ),
+                        },
+                      ]}
+                    />
+                    <CippOffboardingDefaultSettings
+                      formControl={formcontrol}
+                      defaultsSource={cleanedSettings.offboardingDefaultsSource}
+                    />
                   </Stack>
                 </Grid>
                 <Grid size={{ xs: 12, lg: 4 }}>

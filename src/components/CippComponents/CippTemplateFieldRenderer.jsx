@@ -1,15 +1,25 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Typography, Divider } from "@mui/material";
 import { Grid } from "@mui/system";
-import CippFormComponent from "/src/components/CippComponents/CippFormComponent";
-import { getCippTranslation } from "/src/utils/get-cipp-translation";
-import intuneCollection from "/src/data/intuneCollection.json";
+import CippFormComponent from "./CippFormComponent";
+import { getCippTranslation } from "../../utils/get-cipp-translation";
+import { useIntuneCollection } from "../../hooks/use-intune-collection";
 
 const CippTemplateFieldRenderer = ({
   templateData,
   formControl,
   templateType = "conditionalAccess",
 }) => {
+  const intuneCollection = useIntuneCollection();
+  const intuneDefinitionMap = useMemo(() => {
+    const map = new Map();
+    (intuneCollection || []).forEach((def) => {
+      if (def?.id) {
+        map.set(def.id, def);
+      }
+    });
+    return map;
+  }, [intuneCollection]);
   // Default blacklisted fields with wildcard support
   const defaultBlacklistedFields = [
     "id",
@@ -165,9 +175,9 @@ const CippTemplateFieldRenderer = ({
           options: [
             { label: "Not Configured", value: "notConfigured" },
             { label: "Disabled", value: "disabled" },
-            { label: "Enabled for Azure AD Joined", value: "enabledForAzureAd" },
+            { label: "Enabled for Microsoft Entra Joined", value: "enabledForAzureAd" },
             {
-              label: "Enabled for Azure AD and Hybrid Joined",
+              label: "Enabled for Microsoft Entra and Hybrid Joined",
               value: "enabledForAzureAdAndHybrid",
             },
           ],
@@ -235,11 +245,43 @@ const CippTemplateFieldRenderer = ({
   React.useEffect(() => {
     if (templateData && formControl) {
       const processedData = parseIntuneRawJson(templateData);
-      const formValues = {};
 
+      // Recursively strip null values, empty arrays, empty strings,
+      // and @odata / Graph metadata keys so they don't create blank
+      // form fields or phantom sections in the builder.
+      const stripEmpty = (obj) => {
+        if (obj === null || obj === undefined) return undefined;
+        if (typeof obj === "string" && obj.trim() === "") return undefined;
+        if (Array.isArray(obj)) {
+          const filtered = obj
+            .map(stripEmpty)
+            .filter((v) => v !== undefined && v !== null);
+          return filtered.length > 0 ? filtered : undefined;
+        }
+        if (typeof obj === "object") {
+          const result = {};
+          let hasContent = false;
+          for (const [k, v] of Object.entries(obj)) {
+            // Drop @odata annotations and Graph metadata
+            if (k.includes("@odata") || k.startsWith("#")) continue;
+            const cleaned = stripEmpty(v);
+            if (cleaned !== undefined) {
+              result[k] = cleaned;
+              hasContent = true;
+            }
+          }
+          return hasContent ? result : undefined;
+        }
+        return obj;
+      };
+
+      const formValues = {};
       Object.keys(processedData).forEach((key) => {
         if (!isFieldBlacklisted(key)) {
-          formValues[key] = processedData[key];
+          const cleaned = stripEmpty(processedData[key]);
+          if (cleaned !== undefined) {
+            formValues[key] = cleaned;
+          }
         }
       });
       formControl.reset(formValues);
@@ -249,8 +291,92 @@ const CippTemplateFieldRenderer = ({
   const renderFormField = (key, value, path = "") => {
     const fieldPath = path ? `${path}.${key}` : key;
 
+    // Skip null/undefined values and @odata / metadata keys
+    if (value === null || value === undefined) return null;
+    if (key.includes("@odata") || key.startsWith("#")) return null;
+
     if (isFieldBlacklisted(key)) {
       return null;
+    }
+
+    // Render Intune group setting collections with child-friendly fields instead of raw [object Object]
+    if (
+      templateType === "intune" &&
+      key.toLowerCase() === "groupsettingcollectionvalue" &&
+      Array.isArray(value)
+    ) {
+      return (
+        <Grid size={{ xs: 12 }} key={fieldPath}>
+          <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
+            {getCippTranslation(key)}
+          </Typography>
+          <Divider sx={{ mb: 2 }} />
+          <Grid container spacing={2}>
+            {value.map((groupEntry, groupIndex) => (
+              <Grid size={{ xs: 12 }} key={`${fieldPath}.${groupIndex}`}>
+                <Typography variant="subtitle1" sx={{ mt: 1, mb: 1 }}>
+                  {`Entry ${groupIndex + 1}`}
+                </Typography>
+                <Grid container spacing={2}>
+                  {(groupEntry?.children || []).map((child, childIndex) => {
+                    const childPath = `${fieldPath}.${groupIndex}.children.${childIndex}`;
+                    const intuneDefinition = intuneDefinitionMap.get(child?.settingDefinitionId);
+                    const childLabel =
+                      intuneDefinition?.displayName || child?.settingDefinitionId || `Child ${
+                        childIndex + 1
+                      }`;
+
+                    if (child?.simpleSettingValue) {
+                      return (
+                        <Grid size={{ xs: 12, md: 6 }} key={childPath}>
+                          <CippFormComponent
+                            type="textField"
+                            label={childLabel}
+                            name={`${childPath}.simpleSettingValue.value`}
+                            formControl={formControl}
+                            includeSystemVariables={true}
+                            helperText={child?.settingDefinitionId}
+                          />
+                        </Grid>
+                      );
+                    }
+
+                    if (child?.choiceSettingValue) {
+                      const options =
+                        intuneDefinition?.options?.map((option) => ({
+                          label: option.displayName || option.id,
+                          value: option.id,
+                        })) || [];
+
+                      return (
+                        <Grid size={{ xs: 12, md: 6 }} key={childPath}>
+                          <CippFormComponent
+                            type="autoComplete"
+                            label={childLabel}
+                            name={`${childPath}.choiceSettingValue.value`}
+                            formControl={formControl}
+                            options={options}
+                            multiple={false}
+                            helperText={child?.settingDefinitionId}
+                          />
+                        </Grid>
+                      );
+                    }
+
+                    return (
+                      <Grid size={{ xs: 12, md: 6 }} key={childPath}>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                          Unsupported group entry type — edit in JSON if needed.
+                        </Typography>
+                      </Grid>
+                    );
+                  })}
+                </Grid>
+              </Grid>
+            ))}
+          </Grid>
+        </Grid>
+      );
     }
 
     // Check for custom schema handling
@@ -299,9 +425,7 @@ const CippTemplateFieldRenderer = ({
                 // Handle different setting types
                 if (settingInstance.choiceSettingValue) {
                   // Find the setting definition in the intune collection
-                  const intuneObj = intuneCollection.find(
-                    (item) => item.id === settingInstance.settingDefinitionId
-                  );
+                  const intuneObj = intuneDefinitionMap.get(settingInstance.settingDefinitionId);
 
                   const label = intuneObj?.displayName || `Setting ${index + 1}`;
                   const options =
@@ -327,9 +451,7 @@ const CippTemplateFieldRenderer = ({
 
                 if (settingInstance.simpleSettingValue) {
                   // Find the setting definition in the intune collection
-                  const intuneObj = intuneCollection.find(
-                    (item) => item.id === settingInstance.settingDefinitionId
-                  );
+                  const intuneObj = intuneDefinitionMap.get(settingInstance.settingDefinitionId);
 
                   const label = intuneObj?.displayName || `Setting ${index + 1}`;
 
@@ -691,12 +813,16 @@ const CippTemplateFieldRenderer = ({
       {priorityFields.map(
         (fieldName) =>
           processedData[fieldName] !== undefined &&
+          processedData[fieldName] !== null &&
           renderFormField(fieldName, processedData[fieldName])
       )}
 
       {/* Render all other fields except priority fields */}
       {Object.entries(processedData)
-        .filter(([key]) => !priorityFields.includes(key))
+        .filter(
+          ([key, value]) =>
+            !priorityFields.includes(key) && value !== null && value !== undefined
+        )
         .map(([key, value]) => renderFormField(key, value))}
     </Grid>
   );

@@ -1,9 +1,10 @@
-import { TabbedLayout } from "/src/layouts/TabbedLayout";
-import { Layout as DashboardLayout } from "/src/layouts/index.js";
+import { TabbedLayout } from "../../../layouts/TabbedLayout";
+import { Layout as DashboardLayout } from "../../../layouts/index.js";
 import tabOptions from "./tabOptions";
-import CippFormPage from "/src/components/CippFormPages/CippFormPage";
+import CippFormPage from "../../../components/CippFormPages/CippFormPage";
 import { useForm } from "react-hook-form";
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -17,7 +18,7 @@ import {
   SvgIcon,
 } from "@mui/material";
 import { Grid } from "@mui/system";
-import CippFormComponent from "/src/components/CippComponents/CippFormComponent";
+import CippFormComponent from "../../../components/CippComponents/CippFormComponent";
 import { ApiGetCall, ApiPostCall } from "../../../api/ApiCall";
 import { useEffect } from "react";
 import { CippPropertyList } from "../../../components/CippComponents/CippPropertyList";
@@ -27,7 +28,7 @@ import { useState } from "react";
 import { Close } from "@mui/icons-material";
 
 const Page = () => {
-  const pageTitle = "Automated onboarding";
+  const pageTitle = "Automated Onboarding";
   const [testRunning, setTestRunning] = useState(false);
   const [correlationId, setCorrelationId] = useState(null);
   const [validateRunning, setValidateRunning] = useState(false);
@@ -41,6 +42,15 @@ const Page = () => {
     data: { Action: "ListSubscription" },
     queryKey: "listSubscription",
   });
+
+  const subscription = listSubscription?.data?.Results;
+  const expectedWebhookUrl = subscription?.expectedWebhookUrl;
+  // Compared case-insensitively to match the backend, which uses PowerShell's -ne
+  const webhookUrlIsStale =
+    !!expectedWebhookUrl &&
+    !!subscription?.webhookUrl &&
+    subscription.webhookUrl !== "None" &&
+    subscription.webhookUrl.toLowerCase() !== expectedWebhookUrl.toLowerCase();
 
   const listEventTypes = ApiGetCall({
     url: "/api/ExecPartnerWebhook",
@@ -106,6 +116,7 @@ const Page = () => {
   useEffect(() => {
     if (listSubscription.isSuccess && listEventTypes.isSuccess) {
       formControl.reset({
+        enabled: listSubscription?.data?.Results?.enabled ?? false,
         EventType: listSubscription?.data?.Results?.webhookEvents?.map((eventType) => {
           var event = listEventTypes?.data?.Results?.find((event) => event === eventType);
           return { label: event, value: event };
@@ -118,6 +129,7 @@ const Page = () => {
   return (
     <CippFormPage
       title={pageTitle}
+      hideTitle={true}
       hideBackButton={true}
       hidePageType={true}
       allowResubmit={true}
@@ -153,8 +165,28 @@ const Page = () => {
             isFetching={listSubscription.isFetching}
             propertyItems={[
               {
+                label: "Status",
+                value: (
+                  <Chip
+                    color={listSubscription?.data?.Results?.enabled ? "success" : "default"}
+                    label={listSubscription?.data?.Results?.enabled ? "Enabled" : "Disabled"}
+                  />
+                ),
+              },
+              {
                 label: "Webhook URL",
-                value: <CippCodeBlock code={listSubscription?.data?.Results?.webhookUrl} />,
+                value: (
+                  <Stack spacing={1}>
+                    <CippCodeBlock code={subscription?.webhookUrl} />
+                    {webhookUrlIsStale && (
+                      <Alert severity="warning">
+                        This subscription points at a different URL than the one you are using now.
+                        Save the settings below to re-register it against{" "}
+                        <strong>{expectedWebhookUrl}</strong>.
+                      </Alert>
+                    )}
+                  </Stack>
+                ),
                 sx: { pl: 0 },
               },
               {
@@ -166,6 +198,14 @@ const Page = () => {
             ]}
             layout="double"
             showDivider={false}
+          />
+        </Grid>
+        <Grid size={{ md: 12, xs: 12 }}>
+          <CippFormComponent
+            type="switch"
+            label="Enable Automated Onboarding"
+            name="enabled"
+            formControl={formControl}
           />
         </Grid>
         <Grid size={{ md: 12, xs: 12 }}>

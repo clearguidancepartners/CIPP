@@ -22,12 +22,13 @@ const Page = () => {
   // Use useMemo to derive userRoles directly
   const userRoles = useMemo(() => {
     if (orgData.isSuccess && orgData.data?.clientPrincipal?.userRoles) {
-      return orgData.data.clientPrincipal.userRoles.filter(
-        (role) => !blockedRoles.includes(role)
-      );
+      return orgData.data.clientPrincipal.userRoles.filter((role) => !blockedRoles.includes(role));
     }
     return [];
   }, [orgData.isSuccess, orgData.data?.clientPrincipal?.userRoles]);
+
+  const canReturnHome =
+    swaStatus.isSuccess && !!swaStatus?.data?.clientPrincipal && userRoles.length > 0;
   return (
     <>
       <Head>
@@ -54,17 +55,16 @@ const Page = () => {
                   <CippImageCard
                     isFetching={false}
                     imageUrl="/assets/illustrations/undraw_online_test_re_kyfx.svg"
-                    text="You're not allowed to be here, or are logged in under the wrong account."
-                    title="Access Denied"
-                    linkText={
-                      swaStatus?.data?.clientPrincipal !== null && userRoles.length > 0
-                        ? "Return to Home"
-                        : "Login"
+                    text={
+                      orgData?.data?.message ||
+                      "You're not allowed to be here, or are logged in under the wrong account."
                     }
+                    title="Access Denied"
+                    linkText={canReturnHome ? "Return to Home" : "Login"}
                     link={
-                      swaStatus?.data?.clientPrincipal !== null && userRoles.length > 0
+                      canReturnHome
                         ? "/"
-                        : `/.auth/login/aad?post_login_redirect_uri=${encodeURIComponent(
+                        : `/.auth/login/aad?prompt=select_account&post_login_redirect_uri=${encodeURIComponent(
                             window.location.href
                           )}`
                     }

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Button, Typography, Box, Alert } from "@mui/material";
 import { Palette, Upload } from "@mui/icons-material";
-import CippButtonCard from "/src/components/CippCards/CippButtonCard";
-import { ApiGetCall, ApiPostCall } from "/src/api/ApiCall";
-import { useSettings } from "/src/hooks/use-settings";
+import CippButtonCard from "../CippCards/CippButtonCard";
+import { ApiGetCall, ApiPostCall } from "../../api/ApiCall";
+import { useSettings } from "../../hooks/use-settings";
 import { CippApiResults } from "../CippComponents/CippApiResults";
 import CippFormComponent from "../CippComponents/CippFormComponent";
 import { useForm } from "react-hook-form";
@@ -95,7 +95,7 @@ const CippBrandingSettings = () => {
   return (
     <CippButtonCard
       title="Branding Settings"
-      cardSx={{ display: "flex", flexDirection: "column" }}
+      cardSx={{ display: "flex", flexDirection: "column", height: "100%" }}
       CardButton={
         <Box sx={{ display: "flex", gap: 1 }}>
           <Button
@@ -177,33 +177,13 @@ const CippBrandingSettings = () => {
           <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: "bold" }}>
             Brand Color
           </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <input
-              type="color"
-              value={formControl.watch("colour") || "#F77F00"}
-              onChange={(e) => formControl.setValue("colour", e.target.value)}
-              style={{
-                width: "50px",
-                height: "40px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
-                cursor: "pointer",
-              }}
-            />
-            <CippFormComponent
-              type="textField"
-              name="colour"
-              formControl={formControl}
-              label="Hex Color"
-              sx={{ width: "120px" }}
-              validators={{
-                pattern: {
-                  value: /^#[0-9A-F]{6}$/i,
-                  message: "Please enter a valid hex color (e.g., #F77F00)",
-                },
-              }}
-            />
-          </Box>
+          <CippFormComponent
+            type="colorPicker"
+            name="colour"
+            formControl={formControl}
+            label="Hex Color"
+            sx={{ width: "120px" }}
+          />
           <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: "block" }}>
             This color will be used for accents and highlights in reports
           </Typography>
